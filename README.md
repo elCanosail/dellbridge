@@ -1,125 +1,129 @@
+![dellbridge](docs/assets/banner.svg)
+
 # dellbridge
 
-Open macOS bridge for Dell USB-C monitors: DDC/CI CLI, Apple-keyboard routing
-and per-model profiles.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black.svg)
+![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-arm64-green.svg)
+![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
 
-**Status: M1 — transport drafted, awaiting hardware.** The protocol core, the
-macOS transport, the CLI and the packaging pipeline are implemented. Hardware
-validation is blocked on the monitor; the menu bar agent is still a minimal
-shell (M2). Nothing is marked verified until it passes on real hardware.
+**DellBridge puts the Apple keyboard back in charge of your Dell USB-C monitor.**
 
-## Why
+macOS ignores the brightness keys on third-party displays. DellBridge talks
+DDC/CI to the monitor over the same USB-C cable that carries video and power:
+brightness, contrast, volume, input switching, and eventually the media keys
+themselves.
 
-macOS does not route the Apple keyboard's brightness and volume keys to
-third-party displays. Dell's own DDPM is closed, menu-bar oriented and does not
-solve the keyboard problem. The low-level work — talking DDC/CI over
-`IOAVService` on Apple Silicon — is already solved in the open by
-[m1ddc](https://github.com/waydabber/m1ddc) and
-[AppleSiliconDDC](https://github.com/waydabber/AppleSiliconDDC).
+Open source, MIT, no account, no telemetry, no background daemon beyond the
+menu bar app.
 
-dellbridge is the missing bridge: a small, auditable, MIT-licensed layer with
+## Features
 
-- a CLI (`dellctl`) for scripting and diagnostics,
-- a menu bar agent that owns the media keys and shows a native OSD,
-- per-model profiles with explicit quirks and a verification flag.
-
-## Target
-
-- Apple Silicon Mac (M4/M5), latest macOS.
-- Direct USB-C cable: DisplayPort 1.4 Alt Mode plus power delivery. No dock.
-- First profile: **Dell S2725QC** (27" 4K, 65 W USB-C).
-
-Docks and hubs drop DDC/CI often enough that they are out of scope for the
-first milestone; support may be added later as a documented quirk.
+- **Menu bar control** — brightness and input switching without touching the
+  monitor joystick.
+- **`dellctl` CLI** — scriptable DDC/CI: `list`, `get`, `set`, `input`.
+- **Per-model profiles** — VCP codes and quirks live in JSON, with an explicit
+  `verified` flag.
+- **Built on proven ground** — the Apple Silicon `IOAVService` path is adapted
+  from [m1ddc](https://github.com/waydabber/m1ddc) (MIT).
 
 ## Install
 
-Not released yet. The packaging pipeline is ready and runs on macOS:
+The first public release is pending. Once it is published:
 
 ```bash
-make test
-make dmg   # produces dist/DellBridge-0.2.0.dmg
+curl -fsSL https://raw.githubusercontent.com/elCanosail/dellbridge/main/install.sh | bash
 ```
 
-The DMG has a drag-to-Applications layout and an ad-hoc signature, so Apple
-Silicon does not report it as damaged. It is **not notarized** yet: on first
-launch macOS asks for confirmation in System Settings → Privacy & Security.
-True double-click install requires a Developer ID certificate and
-notarization; the full procedure is in
-[docs/plans/m4-distribution.md](docs/plans/m4-distribution.md).
+The script downloads the DMG, verifies its SHA-256, copies `DellBridge.app` to
+`/Applications`, removes the quarantine flag (the app is ad-hoc signed and not
+notarized), and launches it. Read [install.sh](install.sh) before piping it to
+a shell; that is always good advice.
 
-Once the first release and the Homebrew tap exist:
+Prefer the manual route? Download the DMG from
+[Releases](https://github.com/elCanosail/dellbridge/releases), drag the app to
+Applications, and right-click → Open the first time.
+
+Homebrew (once the tap is published):
 
 ```bash
 brew install --cask elcanosail/tap/dellbridge
 ```
 
-## Quick start (hardware check)
+### Requirements
+
+- Apple Silicon Mac (M1 or newer).
+- macOS 13 or newer.
+- A monitor connected **directly** over USB-C with DisplayPort Alt Mode.
+  Docks and hubs frequently drop DDC/CI and are not supported yet.
+- DDC/CI enabled in the monitor OSD: **Others → DDC/CI → On**.
+
+## Usage
+
+Menu bar: brightness ±10, input USB-C/HDMI 1/HDMI 2, refresh, quit.
+
+CLI:
 
 ```bash
-brew install m1ddc
-git clone https://github.com/elCanosail/dellbridge.git
-cd dellbridge
-./scripts/m0-check.sh          # read-only
-./scripts/m0-check.sh --write  # set and restore brightness/contrast/volume
+dellctl list
+dellctl get brightness
+dellctl set brightness 50
+dellctl input usb-c
 ```
 
-The script writes `~/Desktop/dellbridge-m0-report.txt`. Attach it to a
-**Device report** issue.
+`dellctl packet get 10` prints the raw MCCS request, which is useful when
+debugging a monitor that does not answer.
 
-Before running, enable DDC/CI on the monitor:
-**OSD → Others → DDC/CI → On**.
+## Status
 
-## Build and test
+Early alpha, built against a **Dell S2725QC**. The protocol layer and CLI are
+tested; the macOS transport is drafted from the m1ddc reference and has not yet
+been validated on hardware. The `verified` flag in a profile stays `false`
+until a device report proves it.
 
-Requires macOS 13+ and Swift 5.9+ (Xcode command line tools).
+- M0 — hardware feasibility: pending monitor
+- M1 — transport and CLI: implemented, hardware validation pending
+- M2 — media keys and OSD: next
+- M4 — packaging: DMG and installer ready
+
+See [docs/plans/roadmap.md](docs/plans/roadmap.md).
+
+## How it works
+
+DDC/CI is a small command protocol carried over the I2C line inside the video
+cable. On Intel Macs it was reachable through `IOFramebuffer`; on Apple Silicon
+it sits behind the private `IOAVService` API. DellBridge encodes MCCS requests,
+walks the IORegistry to find the display's AV service, and paces writes so the
+shared bus does not jam.
+
+The design and the wire format are documented in
+[docs/architecture.md](docs/architecture.md).
+
+## Build from source
+
+Requires macOS 13+ and the Xcode command line tools.
 
 ```bash
-swift build
-swift test
-./.build/debug/dellctl packet set 10 50
-./.build/debug/dellctl profile profiles/s2725qc.json
+make test
+make app     # dist/DellBridge.app
+make dmg     # dist/DellBridge-0.2.0.dmg
 ```
 
-Display control (macOS only):
+`make dmg` also writes the SHA-256 file used by the installer. Distribution
+details, including the no-notarization trade-off, are in
+[docs/plans/m4-distribution.md](docs/plans/m4-distribution.md).
 
-```bash
-./.build/debug/dellctl list
-./.build/debug/dellctl get brightness
-./.build/debug/dellctl set brightness 50
-./.build/debug/dellctl input usb-c
-```
+## Contributing
 
-`dellctl packet` only encodes the wire payload and prints it as hex; it works
-without hardware. `list`, `get`, `set` and `input` require macOS and a display
-that answers DDC/CI.
+The most useful contribution is a hardware report: run
+`./scripts/m0-check.sh --write` and attach the generated report to a **Device
+report** issue. Code contributions: see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Repository layout
+## License
 
-```
-Sources/DellBridgeCore/   protocol, transport, client, profiles
-Sources/DellBridgeApp/    menu bar shell (macOS only)
-Sources/dellctl/          command line interface
-profiles/                 per-model JSON profiles
-packaging/                Info.plist and Homebrew cask template
-scripts/m0-check.sh       hardware feasibility check
-scripts/build-app.sh      builds dist/DellBridge.app
-scripts/make-dmg.sh       builds the distributable DMG
-docs/                     architecture, roadmap, compatibility
-```
-
-## Roadmap
-
-See [docs/plans/roadmap.md](docs/plans/roadmap.md). M0 decides everything: if
-DDC/CI does not answer over USB-C, the project pivots before writing a
-transport.
-
-## License and attribution
-
-MIT. The DDC/CI packet layout and the Apple Silicon `IOAVService` approach are
-adapted from
-[m1ddc](https://github.com/waydabber/m1ddc) (MIT) by waydabber, and from
-[AppleSiliconDDC](https://github.com/waydabber/AppleSiliconDDC) (MIT).
+MIT. DDC/CI packet layout and the Apple Silicon transport approach are adapted
+from [m1ddc](https://github.com/waydabber/m1ddc) and
+[AppleSiliconDDC](https://github.com/waydabber/AppleSiliconDDC), both MIT.
 
 Not affiliated with Dell. Dell and S2725QC are trademarks of their respective
 owners.

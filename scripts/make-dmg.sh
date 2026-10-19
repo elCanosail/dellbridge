@@ -28,7 +28,10 @@ hdiutil create \
   "$DMG"
 
 echo "built $DMG"
-echo "sha256: $(shasum -a 256 "$DMG" | awk '{print $1}')"
+SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
+printf '%s  %s\n' "$SHA" "$(basename "$DMG")" > "$DMG.sha256"
+echo "sha256: $SHA"
+echo "written $DMG.sha256"
 
 if [[ "${NOTARIZE:-0}" == "1" ]]; then
   echo "notarizing with keychain profile '${NOTARY_PROFILE:-dellbridge}'"

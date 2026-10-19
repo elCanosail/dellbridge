@@ -11,5 +11,10 @@ cask "dellbridge" do
 
   app "DellBridge.app"
 
-  caveats "DellBridge is not notarized yet. On first launch use System Settings > Privacy & Security > Open Anyway."
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/DellBridge.app"]
+  end
+
+  caveats "DellBridge is not notarized yet. This cask removes the quarantine flag so the app opens normally."
 end
