@@ -32,7 +32,7 @@ That path does not exist on Apple Silicon: display work runs on the DCP
 coprocessor and the I2C line sits behind `IOAVService`, an IOKit SPI without a
 public header.
 
-The transport will bind the symbols directly:
+The transport binds the symbols directly:
 
 ```
 IOAVServiceCreateWithService(allocator, ioService) -> IOAVServiceRef
@@ -40,14 +40,33 @@ IOAVServiceWriteI2C(service, chipAddress, dataAddress, buffer, length)
 IOAVServiceReadI2C (service, chipAddress, dataAddress, buffer, length)
 ```
 
-Packet format and checksum are in `Sources/DellBridgeCore/MCCS.swift`. The bus
-is shared and slow: all writes go through one serial queue with a minimum gap
-(`writeDelayMilliseconds` in the profile, 50 ms for the S2725QC hypothesis).
-Slider drags must be coalesced — send only the latest value.
+### Wire format
 
-Display enumeration uses CoreGraphics display IDs and the corresponding IOService
-to build an `IOAVService`. The exact enumeration path is the first M1 task and
-must be validated against hardware; it is the most fragile part of the stack.
+Requests are written at I2C offset `0x51` (the host address):
+
+```
+Get: 82 01 <vcp> <checksum>
+Set: 84 03 <vcp> <hi> <lo> <checksum>
+Reply: 6E 88 02 <result> <vcp> <type> <maxHi> <maxLo> <curHi> <curLo> <checksum>
+```
+
+Read checksum is `0x6E ^ 0x82 ^ 0x01 ^ vcp`; the write checksum includes the
+I2C address (`0x6E ^ 0x51 ^ 0x84 ^ 0x03 ^ vcp ^ hi ^ lo`). Current and maximum
+are big-endian at bytes 8–9 and 6–7. The reply checksum is reported, not
+enforced, because some panels return a sloppy checksum with a valid payload.
+
+The bus is shared and slow: one serialized client per display, a 10 ms read
+wait (50 ms for MCDP29xx), and at least 50 ms between writes when the profile
+asks for it. Slider drags must be coalesced — send only the latest value.
+
+### Display enumeration
+
+`CGGetOnlineDisplayList` → CoreDisplay info dictionary → `IODisplayLocation` →
+`IORegistryEntryCopyFromPath` → match the `IOMobileFramebuffer` registry id →
+next `DCPAVServiceProxy` with `Location == "External"` →
+`IOAVServiceCreateWithService`. The MCDP29xx proxy uses chip address `0xB7`;
+everything else uses `0x37`. This walk is ported from m1ddc and is the most
+fragile part of the stack.
 
 ## Keyboard routing
 

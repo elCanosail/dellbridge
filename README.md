@@ -3,9 +3,10 @@
 Open macOS bridge for Dell USB-C monitors: DDC/CI CLI, Apple-keyboard routing
 and per-model profiles.
 
-**Status: M0 — feasibility.** The protocol core and the hardware check script
-exist. The I2C transport and the menu bar agent land in M1/M2. Nothing is
-marked verified until it passes on real hardware.
+**Status: M1 — transport drafted, awaiting hardware.** The protocol core, the
+macOS transport and the CLI are implemented. Hardware validation is blocked on
+the monitor; the menu bar agent is M2. Nothing is marked verified until it
+passes on real hardware.
 
 ## Why
 
@@ -55,15 +56,26 @@ Requires macOS 13+ and Swift 5.9+ (Xcode command line tools).
 swift build
 swift test
 ./.build/debug/dellctl packet set 10 50
+./.build/debug/dellctl profile profiles/s2725qc.json
 ```
 
-`dellctl packet` only encodes the MCCS message and prints it as hex; the
-transport is milestone M1.
+Display control (macOS only):
+
+```bash
+./.build/debug/dellctl list
+./.build/debug/dellctl get brightness
+./.build/debug/dellctl set brightness 50
+./.build/debug/dellctl input usb-c
+```
+
+`dellctl packet` only encodes the wire payload and prints it as hex; it works
+without hardware. `list`, `get`, `set` and `input` require macOS and a display
+that answers DDC/CI.
 
 ## Repository layout
 
 ```
-Sources/DellBridgeCore/   protocol, VCP catalogue, profiles
+Sources/DellBridgeCore/   protocol, transport, client, profiles
 Sources/dellctl/          command line interface
 profiles/                 per-model JSON profiles
 scripts/m0-check.sh       hardware feasibility check
