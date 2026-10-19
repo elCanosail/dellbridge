@@ -1,0 +1,32 @@
+{
+  "id": "dell-s2725qc",
+  "displayName": "Dell 27 Plus 4K USB-C (S2725QC)",
+  "match": {
+    "manufacturer": "DEL",
+    "model": "S2725QC",
+    "productCode": null
+  },
+  "vcp": {
+    "brightness": 16,
+    "contrast": 18,
+    "volume": 98,
+    "inputSource": 96,
+    "mute": 141
+  },
+  "inputs": {
+    "usb-c": 27,
+    "hdmi-1": 17,
+    "hdmi-2": 18
+  },
+  "quirks": {
+    "writeDelayMilliseconds": 50,
+    "brightnessLockedInHDR": true,
+    "reapplyAfterWake": true,
+    "notes": [
+      "DDC/CI must be enabled in OSD > Others > DDC/CI.",
+      "Expected values from MCCS/m1ddc defaults; not yet verified on this unit.",
+      "USB-C carries DisplayPort 1.4 Alt Mode and 65 W power delivery."
+    ]
+  },
+  "verified": false
+}
