@@ -47,12 +47,15 @@ active audio output.
 
 **Exit:** a week of daily use without a stuck or drifting value.
 
-## M4 — Distribution
+## M4 — Distribution (in progress)
 
-- [ ] Homebrew tap
-- [ ] DMG and release notes
-- [ ] Developer ID signing and notarization (if justified)
+- [x] `DellBridge.app` build script with ad-hoc signing
+- [x] DMG with drag-to-Applications layout and SHA-256 output
+- [x] Homebrew cask template and release workflow (inactive)
+- [x] Device report issue template
+- [ ] First public DMG release
+- [ ] Homebrew tap repository
+- [ ] Developer ID signing and notarization
 - [ ] Compatibility matrix with at least three Dell models
-- [ ] Device report issue template and triage flow
 
 **Exit:** a new user can install and control the monitor in under five minutes.

@@ -4,9 +4,9 @@ Open macOS bridge for Dell USB-C monitors: DDC/CI CLI, Apple-keyboard routing
 and per-model profiles.
 
 **Status: M1 — transport drafted, awaiting hardware.** The protocol core, the
-macOS transport and the CLI are implemented. Hardware validation is blocked on
-the monitor; the menu bar agent is M2. Nothing is marked verified until it
-passes on real hardware.
+macOS transport, the CLI and the packaging pipeline are implemented. Hardware
+validation is blocked on the monitor; the menu bar agent is still a minimal
+shell (M2). Nothing is marked verified until it passes on real hardware.
 
 ## Why
 
@@ -31,6 +31,28 @@ dellbridge is the missing bridge: a small, auditable, MIT-licensed layer with
 
 Docks and hubs drop DDC/CI often enough that they are out of scope for the
 first milestone; support may be added later as a documented quirk.
+
+## Install
+
+Not released yet. The packaging pipeline is ready and runs on macOS:
+
+```bash
+make test
+make dmg   # produces dist/DellBridge-0.2.0.dmg
+```
+
+The DMG has a drag-to-Applications layout and an ad-hoc signature, so Apple
+Silicon does not report it as damaged. It is **not notarized** yet: on first
+launch macOS asks for confirmation in System Settings → Privacy & Security.
+True double-click install requires a Developer ID certificate and
+notarization; the full procedure is in
+[docs/plans/m4-distribution.md](docs/plans/m4-distribution.md).
+
+Once the first release and the Homebrew tap exist:
+
+```bash
+brew install --cask elcanosail/tap/dellbridge
+```
 
 ## Quick start (hardware check)
 
@@ -76,9 +98,13 @@ that answers DDC/CI.
 
 ```
 Sources/DellBridgeCore/   protocol, transport, client, profiles
+Sources/DellBridgeApp/    menu bar shell (macOS only)
 Sources/dellctl/          command line interface
 profiles/                 per-model JSON profiles
+packaging/                Info.plist and Homebrew cask template
 scripts/m0-check.sh       hardware feasibility check
+scripts/build-app.sh      builds dist/DellBridge.app
+scripts/make-dmg.sh       builds the distributable DMG
 docs/                     architecture, roadmap, compatibility
 ```
 

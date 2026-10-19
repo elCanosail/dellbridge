@@ -1,9 +1,9 @@
 # CI workflow (inactive)
 
-`ci.yml` is the macOS build-and-test workflow. It lives here instead of
-`.github/workflows/` because the credential used for the initial bootstrap
-lacked the `workflow` OAuth scope, and GitHub rejects workflow files pushed by
-such an app.
+`ci.yml` is the macOS build-and-test workflow. `release.yml` builds and
+publishes the DMG on a `v*` tag. They live here instead of `.github/workflows/`
+because the credential used for the initial bootstrap lacked the `workflow`
+OAuth scope, and GitHub rejects workflow files pushed by such an app.
 
 To activate it:
 
