@@ -3,9 +3,9 @@
 **Goal:** make the Apple brightness keys control the Dell panel and show a
 native HUD, without breaking the rest of the media keys.
 
-**Status:** M2a validated on hardware (2026-10-20); M2b implemented and
-user-validated (2026-10-20). Refactor `ce278ab` builds; final smoke test after
-the code-review changes is pending.
+**Status:** M2a and M2b validated on hardware (2026-10-20). Code-review
+refactor `ce278ab` and the click/parser fixes (`4d2ebec`, `e61a054`) are in the
+shipping build; target-display selection remains for a later slice.
 
 ## Implemented
 
@@ -57,3 +57,4 @@ the code-review changes is pending.
 | --- | --- | --- | --- | --- |
 | 2026-10-20 | MacBook M4 | macOS | Brightness keys change the S2725QC. `/tmp/dellbridge-media.log` shows `keyDown keycode=144/145`; the `NX_SYSDEFINED` path arrives with subtype 7 and is ignored. | commit `0e8615b` |
 | 2026-10-20 | MacBook M4 | macOS | Volume down/up/mute and native MacBook fallback validated by user; `VCP 0x62` works, `VCP 0x8D` mute write is a no-op. | commits `d6a2088`…`b6457aa` |
+| 2026-10-20 | MacBook M4 | macOS | Clicks no longer change volume: non-media `NX_SYSDEFINED data1=1` events are rejected; user confirmed Safari/status-icon clicks are clean. | commit `4d2ebec` |
