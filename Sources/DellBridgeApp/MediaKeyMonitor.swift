@@ -20,17 +20,21 @@ private func debugLog(_ message: String) {
     }
 }
 
-/// Intercepts Apple brightness keys through a session event tap.
+/// Intercepts Apple brightness keys through both a session event tap and
+/// NSEvent global/local monitors.
 ///
-/// The monitor only consumes the brightness key codes. Every other
-/// system-defined media key is passed through untouched. If the tap cannot be
-/// created (Accessibility permission missing), `start()` returns `false` and
-/// the app keeps working through the menu bar.
+/// The event tap can suppress the event when it works. The monitors are the
+/// fallback for macOS versions where the media keys are not delivered to the
+/// tap; they cannot suppress, but on an external display the system action is
+/// harmless and our DDC write is the visible result. A shared throttle avoids
+/// double adjustments if both paths see the same key press.
 final class MediaKeyMonitor {
     var onBrightness: ((Int) -> Bool)?
 
     fileprivate var tap: CFMachPort?
     private var source: CFRunLoopSource?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var lastHandled: TimeInterval = 0
     private let throttle: TimeInterval = 0.08
 
@@ -38,22 +42,51 @@ final class MediaKeyMonitor {
         stop()
 
         debugLog("start trusted=\(AXIsProcessTrusted())")
-        let tap = makeTap(.cghidEventTap) ?? makeTap(.cgSessionEventTap)
-        guard let tap else {
+
+        let tap = makeTap(.cgSessionEventTap) ?? makeTap(.cghidEventTap)
+        if let tap {
+            self.tap = tap
+            if let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) {
+                self.source = source
+                CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+                CGEvent.tapEnable(tap: tap, enable: true)
+                debugLog("tap created")
+            } else {
+                debugLog("run loop source failed")
+            }
+        } else {
             debugLog("tap creation failed")
-            return false
         }
-        self.tap = tap
-        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
-            debugLog("run loop source failed")
-            self.tap = nil
-            return false
+
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+            _ = self?.handle(nsEvent: event)
         }
-        self.source = source
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-        debugLog("tap created")
-        return true
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+            guard let self else { return event }
+            return self.handle(nsEvent: event) ? nil : event
+        }
+        debugLog("monitors global=\(globalMonitor != nil) local=\(localMonitor != nil)")
+
+        return tap != nil || globalMonitor != nil || localMonitor != nil
+    }
+
+    func stop() {
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+        }
+        if let source {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+        }
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+        }
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+        }
+        tap = nil
+        source = nil
+        globalMonitor = nil
+        localMonitor = nil
     }
 
     private func makeTap(_ location: CGEventTapLocation) -> CFMachPort? {
@@ -68,23 +101,19 @@ final class MediaKeyMonitor {
         )
     }
 
-    func stop() {
-        if let tap {
-            CGEvent.tapEnable(tap: tap, enable: false)
+    fileprivate func handle(event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard let ns = NSEvent(cgEvent: event) else {
+            debugLog("NSEvent nil cgtype=\(event.type.rawValue)")
+            return Unmanaged.passUnretained(event)
         }
-        if let source {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
-        }
-        tap = nil
-        source = nil
+        return handle(nsEvent: ns) ? nil : Unmanaged.passUnretained(event)
     }
 
-    fileprivate func handle(event: CGEvent) -> Unmanaged<CGEvent>? {
-        guard let ns = NSEvent(cgEvent: event),
-              ns.type == .systemDefined,
-              ns.subtype.rawValue == nxSubtypeAuxControlButtons else {
-            debugLog("non-system event type=\(event.type.rawValue)")
-            return Unmanaged.passUnretained(event)
+    @discardableResult
+    private func handle(nsEvent ns: NSEvent) -> Bool {
+        guard ns.type == .systemDefined, ns.subtype.rawValue == nxSubtypeAuxControlButtons else {
+            debugLog("ns type=\(ns.type.rawValue) subtype=\(ns.subtype.rawValue)")
+            return false
         }
 
         let data1 = ns.data1
@@ -95,24 +124,24 @@ final class MediaKeyMonitor {
         let isKeyDown = keyState == 0x0A
 
         guard keyCode == nxKeyTypeBrightnessUp || keyCode == nxKeyTypeBrightnessDown else {
-            return Unmanaged.passUnretained(event)
+            return false
         }
         if !isKeyDown {
-            // Key-up for a key we own; swallow it so the system does not act.
-            return nil
+            // Key-up for a key we own; swallow it in the local/tap path.
+            return true
         }
         guard onBrightness != nil else {
-            return Unmanaged.passUnretained(event)
+            return false
         }
 
         let now = ProcessInfo.processInfo.systemUptime
         if now - lastHandled < throttle {
-            return nil
+            return true
         }
         lastHandled = now
 
         let delta = keyCode == nxKeyTypeBrightnessUp ? 1 : -1
-        return (onBrightness?(delta) ?? false) ? nil : Unmanaged.passUnretained(event)
+        return onBrightness?(delta) ?? false
     }
 }
 
