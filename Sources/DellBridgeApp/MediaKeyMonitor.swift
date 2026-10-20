@@ -58,10 +58,11 @@ final class MediaKeyMonitor {
             debugLog("tap creation failed")
         }
 
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+        let monitorMask: NSEvent.EventTypeMask = [.systemDefined, .keyDown]
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: monitorMask) { [weak self] event in
             _ = self?.handle(nsEvent: event)
         }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: monitorMask) { [weak self] event in
             guard let self else { return event }
             return self.handle(nsEvent: event) ? nil : event
         }
@@ -90,7 +91,12 @@ final class MediaKeyMonitor {
     }
 
     private func makeTap(_ location: CGEventTapLocation) -> CFMachPort? {
-        let mask = CGEventMask(1) << CGEventMask(NSEvent.EventType.systemDefined.rawValue)
+        // Brightness keys arrive as NX_SYSDEFINED aux events on a normal
+        // desktop. In clamshell (or with no built-in display to target), macOS
+        // can suppress that event while the raw F1/F2 keyDown still flows.
+        // Tap both, exactly like MonitorControl/Crisp do.
+        let mask = (CGEventMask(1) << CGEventMask(NSEvent.EventType.systemDefined.rawValue))
+            | (CGEventMask(1) << CGEventMask(CGEventType.keyDown.rawValue))
         return CGEvent.tapCreate(
             tap: location,
             place: .headInsertEventTap,
@@ -102,6 +108,19 @@ final class MediaKeyMonitor {
     }
 
     fileprivate func handle(event: CGEvent) -> Unmanaged<CGEvent>? {
+        if event.type == .keyDown {
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            debugLog("keyDown keycode=\(keyCode)")
+            switch keyCode {
+            case 144:
+                return handleBrightness(direction: 1) ? nil : Unmanaged.passUnretained(event)
+            case 145:
+                return handleBrightness(direction: -1) ? nil : Unmanaged.passUnretained(event)
+            default:
+                return Unmanaged.passUnretained(event)
+            }
+        }
+
         guard let ns = NSEvent(cgEvent: event) else {
             debugLog("NSEvent nil cgtype=\(event.type.rawValue)")
             return Unmanaged.passUnretained(event)
@@ -111,6 +130,18 @@ final class MediaKeyMonitor {
 
     @discardableResult
     private func handle(nsEvent ns: NSEvent) -> Bool {
+        if ns.type == .keyDown {
+            debugLog("ns keyDown keycode=\(ns.keyCode)")
+            switch ns.keyCode {
+            case 144:
+                return handleBrightness(direction: 1)
+            case 145:
+                return handleBrightness(direction: -1)
+            default:
+                return false
+            }
+        }
+
         guard ns.type == .systemDefined, ns.subtype.rawValue == nxSubtypeAuxControlButtons else {
             debugLog("ns type=\(ns.type.rawValue) subtype=\(ns.subtype.rawValue)")
             return false
@@ -118,10 +149,8 @@ final class MediaKeyMonitor {
 
         let data1 = ns.data1
         debugLog("systemDefined data1=\(data1)")
-        let keyCode = (data1 & 0xFFFF0000) >> 16
-        let keyFlags = data1 & 0x0000FFFF
-        let keyState = (keyFlags & 0xFF00) >> 8
-        let isKeyDown = keyState == 0x0A
+        let keyCode = (data1 >> 16) & 0xFF
+        let isKeyDown = (data1 & 0x0100) == 0
 
         guard keyCode == nxKeyTypeBrightnessUp || keyCode == nxKeyTypeBrightnessDown else {
             return false
@@ -130,6 +159,12 @@ final class MediaKeyMonitor {
             // Key-up for a key we own; swallow it in the local/tap path.
             return true
         }
+        let delta = keyCode == nxKeyTypeBrightnessUp ? 1 : -1
+        return handleBrightness(direction: delta)
+    }
+
+    @discardableResult
+    private func handleBrightness(direction: Int) -> Bool {
         guard onBrightness != nil else {
             return false
         }
@@ -139,9 +174,7 @@ final class MediaKeyMonitor {
             return true
         }
         lastHandled = now
-
-        let delta = keyCode == nxKeyTypeBrightnessUp ? 1 : -1
-        return onBrightness?(delta) ?? false
+        return onBrightness?(direction) ?? false
     }
 }
 
