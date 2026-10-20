@@ -43,7 +43,7 @@ private func isMCDP29XXProxy(_ proxy: io_service_t) -> Bool {
 
     guard let value = registryProperty(parent, "EPICProviderClass") else { return false }
     guard CFGetTypeID(value) == CFStringGetTypeID() else { return false }
-    return CFStringCompare(value as! CFString, "AppleDCPMCDP29XX" as CFString, []) == .compareEqualTo
+    return CFStringCompare((value as! CFString), "AppleDCPMCDP29XX" as CFString, []) == .compareEqualTo
 }
 
 /// Online display enumeration. Mirrors m1ddc's IORegistry walk: find the

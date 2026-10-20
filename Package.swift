@@ -7,14 +7,14 @@ var products: [Product] = [
 ]
 
 var targets: [Target] = [
-    .target(name: "DellBridgeCore"),
-    .executableTarget(name: "dellctl", dependencies: ["DellBridgeCore"]),
-    .testTarget(name: "DellBridgeCoreTests", dependencies: ["DellBridgeCore"]),
+    .target(name: "DellBridgeCore", linkerSettings: [.linkedFramework("CoreDisplay")]),
+    .executableTarget(name: "dellctl", dependencies: ["DellBridgeCore"], linkerSettings: [.linkedFramework("CoreDisplay")]),
+    .testTarget(name: "DellBridgeCoreTests", dependencies: ["DellBridgeCore"], linkerSettings: [.linkedFramework("CoreDisplay")]),
 ]
 
 #if os(macOS)
 products.append(.executable(name: "DellBridge", targets: ["DellBridgeApp"]))
-targets.append(.executableTarget(name: "DellBridgeApp", dependencies: ["DellBridgeCore"]))
+targets.append(.executableTarget(name: "DellBridgeApp", dependencies: ["DellBridgeCore"], linkerSettings: [.linkedFramework("CoreDisplay")]))
 #endif
 
 let package = Package(
