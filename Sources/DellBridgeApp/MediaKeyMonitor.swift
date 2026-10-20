@@ -200,9 +200,19 @@ final class MediaKeyMonitor {
         }
 
         let data1 = ns.data1
-        debugLog("systemDefined data1=\(data1)")
         let keyCode = (data1 >> 16) & 0xFF
-        let isKeyDown = (data1 & 0x0100) == 0
+        let keyState = (data1 >> 8) & 0xFF
+        // NX_SYSDEFINED is also used for non-media events (mouse clicks can
+        // arrive as data1=1). Only 0x0A (down), 0x08 (repeat) and 0x0B (up)
+        // are real auxiliary-key states; anything else must pass through.
+        guard keyState == 0x0A || keyState == 0x0B || keyState == 0x08 else {
+            return false
+        }
+        guard keyCode == 2 || keyCode == 3 || keyCode == 0 || keyCode == 1 || keyCode == 7 else {
+            return false
+        }
+        debugLog("systemDefined key=\(keyCode) state=\(keyState) data1=\(data1)")
+        let isKeyDown = keyState != 0x0B
 
         switch keyCode {
         case nxKeyTypeBrightnessUp, nxKeyTypeBrightnessDown:
