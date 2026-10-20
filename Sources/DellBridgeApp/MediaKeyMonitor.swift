@@ -47,6 +47,7 @@ final class MediaKeyMonitor {
     private var lastVolume: TimeInterval = 0
     private var lastMute: TimeInterval = 0
     private let throttle: TimeInterval = 0.08
+    private let volumeThrottle: TimeInterval = 0.18
 
     func start() -> Bool {
         stop()
@@ -68,15 +69,23 @@ final class MediaKeyMonitor {
             debugLog("tap creation failed")
         }
 
-        let monitorMask: NSEvent.EventTypeMask = [.systemDefined, .keyDown]
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: monitorMask) { [weak self] event in
-            _ = self?.handle(nsEvent: event)
+        // The tap can suppress the event. The NSEvent monitors cannot, so
+        // installing both paths makes one physical press adjust the DDC twice
+        // (and lets macOS change its own volume too). Use them only when the
+        // tap could not be created.
+        if self.tap == nil {
+            let monitorMask: NSEvent.EventTypeMask = [.systemDefined, .keyDown]
+            globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: monitorMask) { [weak self] event in
+                _ = self?.handle(nsEvent: event)
+            }
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: monitorMask) { [weak self] event in
+                guard let self else { return event }
+                return self.handle(nsEvent: event) ? nil : event
+            }
+            debugLog("monitors fallback global=\(globalMonitor != nil) local=\(localMonitor != nil)")
+        } else {
+            debugLog("monitors skipped (tap active)")
         }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: monitorMask) { [weak self] event in
-            guard let self else { return event }
-            return self.handle(nsEvent: event) ? nil : event
-        }
-        debugLog("monitors global=\(globalMonitor != nil) local=\(localMonitor != nil)")
 
         return tap != nil || globalMonitor != nil || localMonitor != nil
     }
@@ -118,7 +127,9 @@ final class MediaKeyMonitor {
     fileprivate func handle(event: CGEvent) -> Unmanaged<CGEvent>? {
         if event.type == .keyDown {
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-            debugLog("keyDown keycode=\(keyCode)")
+            if keyCode == 144 || keyCode == 145 || keyCode == 72 || keyCode == 73 || keyCode == 74 {
+                debugLog("keyDown keycode=\(keyCode)")
+            }
             switch keyCode {
             case 144:
                 return handleBrightness(direction: 1) ? nil : Unmanaged.passUnretained(event)
@@ -145,7 +156,9 @@ final class MediaKeyMonitor {
     @discardableResult
     private func handle(nsEvent ns: NSEvent) -> Bool {
         if ns.type == .keyDown {
-            debugLog("ns keyDown keycode=\(ns.keyCode)")
+            if ns.keyCode == 144 || ns.keyCode == 145 || ns.keyCode == 72 || ns.keyCode == 73 || ns.keyCode == 74 {
+                debugLog("ns keyDown keycode=\(ns.keyCode)")
+            }
             switch ns.keyCode {
             case 144:
                 return handleBrightness(direction: 1)
@@ -165,7 +178,6 @@ final class MediaKeyMonitor {
         guard ns.type == .systemDefined,
               ns.subtype.rawValue == nxSubtypeAuxControlButtons
                 || ns.subtype.rawValue == nxSubtypeAuxControlButtonsLegacy else {
-            debugLog("ns type=\(ns.type.rawValue) subtype=\(ns.subtype.rawValue)")
             return false
         }
 
@@ -208,7 +220,7 @@ final class MediaKeyMonitor {
             return false
         }
         let now = ProcessInfo.processInfo.systemUptime
-        if now - lastVolume < throttle {
+        if now - lastVolume < volumeThrottle {
             return true
         }
         lastVolume = now
@@ -221,7 +233,7 @@ final class MediaKeyMonitor {
             return false
         }
         let now = ProcessInfo.processInfo.systemUptime
-        if now - lastMute < throttle {
+        if now - lastMute < volumeThrottle {
             return true
         }
         lastMute = now
