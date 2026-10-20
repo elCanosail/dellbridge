@@ -38,6 +38,9 @@ final class MediaKeyMonitor {
     var onBrightness: ((Int) -> Bool)?
     var onVolume: ((Int) -> Bool)?
     var onMute: (() -> Bool)?
+    var shouldHandleBrightness: (() -> Bool)?
+    var shouldHandleVolume: (() -> Bool)?
+    var shouldHandleMute: (() -> Bool)?
 
     fileprivate var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -47,6 +50,7 @@ final class MediaKeyMonitor {
     private var lastVolume: TimeInterval = 0
     private var lastVolumeDirection = 0
     private var lastMute: TimeInterval = 0
+    private var brightnessKeyDownHandled = false
     private var volumeKeyDownHandled = false
     private var muteKeyDownHandled = false
     private let throttle: TimeInterval = 0.08
@@ -115,6 +119,7 @@ final class MediaKeyMonitor {
         source = nil
         globalMonitor = nil
         localMonitor = nil
+        brightnessKeyDownHandled = false
         volumeKeyDownHandled = false
         muteKeyDownHandled = false
     }
@@ -198,8 +203,13 @@ final class MediaKeyMonitor {
 
         switch keyCode {
         case nxKeyTypeBrightnessUp, nxKeyTypeBrightnessDown:
-            guard isKeyDown else { return true }
-            return handleBrightness(direction: keyCode == nxKeyTypeBrightnessUp ? 1 : -1)
+            if isKeyDown {
+                brightnessKeyDownHandled = handleBrightness(direction: keyCode == nxKeyTypeBrightnessUp ? 1 : -1)
+                return brightnessKeyDownHandled
+            }
+            let handled = brightnessKeyDownHandled
+            brightnessKeyDownHandled = false
+            return handled
         case nxKeyTypeSoundUp, nxKeyTypeSoundDown:
             if isKeyDown {
                 volumeKeyDownHandled = handleVolume(direction: keyCode == nxKeyTypeSoundUp ? 1 : -1)
@@ -223,7 +233,7 @@ final class MediaKeyMonitor {
 
     @discardableResult
     private func handleBrightness(direction: Int) -> Bool {
-        guard onBrightness != nil else {
+        guard onBrightness != nil, shouldHandleBrightness?() ?? true else {
             return false
         }
         let now = ProcessInfo.processInfo.systemUptime
@@ -236,7 +246,7 @@ final class MediaKeyMonitor {
 
     @discardableResult
     private func handleVolume(direction: Int) -> Bool {
-        guard onVolume != nil else {
+        guard onVolume != nil, shouldHandleVolume?() ?? true else {
             return false
         }
         let now = ProcessInfo.processInfo.systemUptime
@@ -252,7 +262,7 @@ final class MediaKeyMonitor {
 
     @discardableResult
     private func handleMute() -> Bool {
-        guard onMute != nil else {
+        guard onMute != nil, shouldHandleMute?() ?? true else {
             return false
         }
         let now = ProcessInfo.processInfo.systemUptime

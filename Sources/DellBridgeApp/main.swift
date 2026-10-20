@@ -183,15 +183,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mediaKeys.onBrightness = { [weak self] direction in
             self?.changeBrightnessStep(direction) ?? false
         }
+        mediaKeys.shouldHandleBrightness = { [weak self] in
+            self?.shouldHandleBrightnessKeys() ?? false
+        }
         mediaKeys.onVolume = { [weak self] direction in
-            guard let self, self.shouldHandleVolumeKeys() else { return false }
+            guard let self else { return false }
             self.volumeQueue.async { _ = self.changeVolumeStep(direction) }
             return true
         }
+        mediaKeys.shouldHandleVolume = { [weak self] in
+            self?.shouldHandleVolumeKeys() ?? false
+        }
         mediaKeys.onMute = { [weak self] in
-            guard let self, self.shouldHandleVolumeKeys() else { return false }
+            guard let self else { return false }
             self.volumeQueue.async { _ = self.toggleMute() }
             return true
+        }
+        mediaKeys.shouldHandleMute = { [weak self] in
+            self?.shouldHandleVolumeKeys() ?? false
         }
         if prompt {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -205,6 +214,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let name = defaultOutputDeviceName() else { return false }
         let lower = name.lowercased()
         return lower.contains("dell") || lower.contains("s2725")
+    }
+
+    private func shouldHandleBrightnessKeys() -> Bool {
+        guard client != nil else { return false }
+        return AppleSiliconDisplays.all().contains(where: { $0.isExternal })
     }
 
     private func defaultOutputDeviceName() -> String? {
