@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import ApplicationServices
+import CoreAudio
 import DellBridgeCore
 
 /// Minimal menu bar shell. The full media-key agent is M2; this exists so the
@@ -44,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(item("Brightness +10", #selector(brightnessUp)))
         menu.addItem(item("Brightness −10", #selector(brightnessDown)))
+        menu.addItem(.separator())
+        menu.addItem(item("Volume +10", #selector(volumeUp)))
+        menu.addItem(item("Volume −10", #selector(volumeDown)))
+        menu.addItem(item("Mute", #selector(muteMenu)))
         menu.addItem(.separator())
         menu.addItem(item("Input: USB-C", #selector(inputUSBC)))
         menu.addItem(item("Input: HDMI 1", #selector(inputHDMI1)))
@@ -99,6 +104,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func volumeUp() { _ = changeVolumeStep(1) }
+    @objc private func volumeDown() { _ = changeVolumeStep(-1) }
+    @objc private func muteMenu() { _ = toggleMute() }
+
+    @discardableResult
+    private func changeVolumeStep(_ direction: Int) -> Bool {
+        guard let client else { return false }
+        do {
+            let reference = try client.read(VCP.volume.rawValue)
+            let step = max(1, Int(reference.maximum) / 16)
+            if direction > 0, let mute = try? client.read(VCP.mute.rawValue), mute.current != 0 {
+                try? client.write(VCP.mute.rawValue, value: 0)
+            }
+            let value = try client.change(VCP.volume.rawValue, by: direction * step)
+            osd.showVolume(current: Int(value.current), maximum: Int(value.maximum))
+            return true
+        } catch {
+            NSSound.beep()
+            return false
+        }
+    }
+
+    @discardableResult
+    private func toggleMute() -> Bool {
+        guard let client else { return false }
+        do {
+            let current = try client.read(VCP.mute.rawValue)
+            let newValue: UInt16 = current.current == 0 ? 1 : 0
+            try client.write(VCP.mute.rawValue, value: newValue)
+            osd.showMute(newValue != 0)
+            return true
+        } catch {
+            NSSound.beep()
+            return false
+        }
+    }
+
     @objc private func inputUSBC() { setInput(InputSource.usbC.rawValue) }
     @objc private func inputHDMI1() { setInput(InputSource.hdmi1.rawValue) }
     @objc private func inputHDMI2() { setInput(InputSource.hdmi2.rawValue) }
@@ -121,12 +163,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mediaKeys.onBrightness = { [weak self] direction in
             self?.changeBrightnessStep(direction) ?? false
         }
+        mediaKeys.onVolume = { [weak self] direction in
+            guard let self, self.shouldHandleVolumeKeys() else { return false }
+            return self.changeVolumeStep(direction)
+        }
+        mediaKeys.onMute = { [weak self] in
+            guard let self, self.shouldHandleVolumeKeys() else { return false }
+            return self.toggleMute()
+        }
         if prompt {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         }
         mediaKeysActive = mediaKeys.start()
         rebuildMenu()
+    }
+
+    private func shouldHandleVolumeKeys() -> Bool {
+        guard let name = defaultOutputDeviceName() else { return false }
+        let lower = name.lowercased()
+        return lower.contains("dell") || lower.contains("s2725")
+    }
+
+    private func defaultOutputDeviceName() -> String? {
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &deviceID
+        ) == noErr else {
+            return nil
+        }
+
+        var name: CFString = "" as CFString
+        var nameSize = UInt32(MemoryLayout<CFString>.size)
+        var nameAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(
+            deviceID,
+            &nameAddress,
+            0,
+            nil,
+            &nameSize,
+            &name
+        ) == noErr else {
+            return nil
+        }
+        return name as String
     }
 
     @objc private func openAccessibilitySettings() {

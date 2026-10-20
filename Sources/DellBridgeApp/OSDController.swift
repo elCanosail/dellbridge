@@ -13,11 +13,24 @@ final class OSDController {
     private var hideWorkItem: DispatchWorkItem?
 
     func showBrightness(current: Int, maximum: Int) {
-        let panel = ensurePanel()
-        iconView?.image = NSImage(
-            systemSymbolName: "sun.max.fill",
-            accessibilityDescription: "Brightness"
+        show(icon: "sun.max.fill", current: current, maximum: maximum)
+    }
+
+    func showVolume(current: Int, maximum: Int) {
+        show(icon: "speaker.wave.2.fill", current: current, maximum: maximum)
+    }
+
+    func showMute(_ muted: Bool) {
+        show(
+            icon: muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+            current: muted ? 0 : 100,
+            maximum: 100
         )
+    }
+
+    private func show(icon name: String, current: Int, maximum: Int) {
+        let panel = ensurePanel()
+        iconView?.image = NSImage(systemSymbolName: name, accessibilityDescription: name)
         let percent = maximum > 0
             ? max(0, min(100, Int((Double(current) / Double(maximum) * 100).rounded())))
             : 0

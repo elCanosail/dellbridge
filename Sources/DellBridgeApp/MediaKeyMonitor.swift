@@ -6,6 +6,9 @@ import CoreGraphics
 private let nxSubtypeAuxControlButtons: Int16 = 8
 private let nxKeyTypeBrightnessUp = 2
 private let nxKeyTypeBrightnessDown = 3
+private let nxKeyTypeSoundUp = 0
+private let nxKeyTypeSoundDown = 1
+private let nxKeyTypeMute = 7
 private let debugLogPath = "/tmp/dellbridge-media.log"
 
 private func debugLog(_ message: String) {
@@ -20,22 +23,28 @@ private func debugLog(_ message: String) {
     }
 }
 
-/// Intercepts Apple brightness keys through both a session event tap and
+/// Intercepts Apple brightness/volume keys through a session event tap plus
 /// NSEvent global/local monitors.
 ///
-/// The event tap can suppress the event when it works. The monitors are the
-/// fallback for macOS versions where the media keys are not delivered to the
-/// tap; they cannot suppress, but on an external display the system action is
-/// harmless and our DDC write is the visible result. A shared throttle avoids
-/// double adjustments if both paths see the same key press.
+/// Brightness and volume keys arrive as NX_SYSDEFINED aux events on a normal
+/// desktop. In clamshell (or with no built-in display to target), macOS can
+/// suppress that event while the raw F1/F2/F3 keyDown still flows. Both paths
+/// are handled. The monitors are a second path for macOS versions where the
+/// tap does not receive the key; they cannot suppress, but on an external
+/// display the system action is harmless. Per-key throttles avoid double
+/// adjustments if both paths see the same press.
 final class MediaKeyMonitor {
     var onBrightness: ((Int) -> Bool)?
+    var onVolume: ((Int) -> Bool)?
+    var onMute: (() -> Bool)?
 
     fileprivate var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var lastHandled: TimeInterval = 0
+    private var lastBrightness: TimeInterval = 0
+    private var lastVolume: TimeInterval = 0
+    private var lastMute: TimeInterval = 0
     private let throttle: TimeInterval = 0.08
 
     func start() -> Bool {
@@ -91,10 +100,8 @@ final class MediaKeyMonitor {
     }
 
     private func makeTap(_ location: CGEventTapLocation) -> CFMachPort? {
-        // Brightness keys arrive as NX_SYSDEFINED aux events on a normal
-        // desktop. In clamshell (or with no built-in display to target), macOS
-        // can suppress that event while the raw F1/F2 keyDown still flows.
-        // Tap both, exactly like MonitorControl/Crisp do.
+        // Brightness/volume keys can arrive as NX_SYSDEFINED aux events or as
+        // raw keyDown events (clamshell/no built-in display). Tap both.
         let mask = (CGEventMask(1) << CGEventMask(NSEvent.EventType.systemDefined.rawValue))
             | (CGEventMask(1) << CGEventMask(CGEventType.keyDown.rawValue))
         return CGEvent.tapCreate(
@@ -116,6 +123,12 @@ final class MediaKeyMonitor {
                 return handleBrightness(direction: 1) ? nil : Unmanaged.passUnretained(event)
             case 145:
                 return handleBrightness(direction: -1) ? nil : Unmanaged.passUnretained(event)
+            case 72:
+                return handleVolume(direction: 1) ? nil : Unmanaged.passUnretained(event)
+            case 73:
+                return handleVolume(direction: -1) ? nil : Unmanaged.passUnretained(event)
+            case 74:
+                return handleMute() ? nil : Unmanaged.passUnretained(event)
             default:
                 return Unmanaged.passUnretained(event)
             }
@@ -137,6 +150,12 @@ final class MediaKeyMonitor {
                 return handleBrightness(direction: 1)
             case 145:
                 return handleBrightness(direction: -1)
+            case 72:
+                return handleVolume(direction: 1)
+            case 73:
+                return handleVolume(direction: -1)
+            case 74:
+                return handleMute()
             default:
                 return false
             }
@@ -152,15 +171,19 @@ final class MediaKeyMonitor {
         let keyCode = (data1 >> 16) & 0xFF
         let isKeyDown = (data1 & 0x0100) == 0
 
-        guard keyCode == nxKeyTypeBrightnessUp || keyCode == nxKeyTypeBrightnessDown else {
+        switch keyCode {
+        case nxKeyTypeBrightnessUp, nxKeyTypeBrightnessDown:
+            guard isKeyDown else { return true }
+            return handleBrightness(direction: keyCode == nxKeyTypeBrightnessUp ? 1 : -1)
+        case nxKeyTypeSoundUp, nxKeyTypeSoundDown:
+            guard isKeyDown else { return true }
+            return handleVolume(direction: keyCode == nxKeyTypeSoundUp ? 1 : -1)
+        case nxKeyTypeMute:
+            guard isKeyDown else { return true }
+            return handleMute()
+        default:
             return false
         }
-        if !isKeyDown {
-            // Key-up for a key we own; swallow it in the local/tap path.
-            return true
-        }
-        let delta = keyCode == nxKeyTypeBrightnessUp ? 1 : -1
-        return handleBrightness(direction: delta)
     }
 
     @discardableResult
@@ -168,13 +191,38 @@ final class MediaKeyMonitor {
         guard onBrightness != nil else {
             return false
         }
-
         let now = ProcessInfo.processInfo.systemUptime
-        if now - lastHandled < throttle {
+        if now - lastBrightness < throttle {
             return true
         }
-        lastHandled = now
+        lastBrightness = now
         return onBrightness?(direction) ?? false
+    }
+
+    @discardableResult
+    private func handleVolume(direction: Int) -> Bool {
+        guard onVolume != nil else {
+            return false
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastVolume < throttle {
+            return true
+        }
+        lastVolume = now
+        return onVolume?(direction) ?? false
+    }
+
+    @discardableResult
+    private func handleMute() -> Bool {
+        guard onMute != nil else {
+            return false
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastMute < throttle {
+            return true
+        }
+        lastMute = now
+        return onMute?() ?? false
     }
 }
 
