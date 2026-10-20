@@ -305,8 +305,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// events through creates needless lifecycle and permission edge cases.
     private func updateMediaKeyTap() {
         let hasExternal = AppleSiliconDisplays.all().contains(where: { $0.isExternal })
-        let dellAudio = shouldHandleVolumeKeys()
-        let needed = hasExternal || dellAudio
+        // No external display means there is no DDC target, regardless of a
+        // stale audio device entry. Leave every media key to macOS.
+        let needed = hasExternal
 
         if needed, !mediaKeysActive {
             mediaKeysActive = mediaKeys.start()
