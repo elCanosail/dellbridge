@@ -57,6 +57,7 @@ final class MediaKeyMonitor {
     private let volumeThrottle: TimeInterval = 0.18
 
     func start() -> Bool {
+        precondition(Thread.isMainThread, "MediaKeyMonitor.start must run on the main thread")
         stop()
 
         debugLog("start trusted=\(AXIsProcessTrusted())")
@@ -99,10 +100,12 @@ final class MediaKeyMonitor {
             debugLog("monitors skipped (tap active)")
         }
 
-        return tap != nil || globalMonitor != nil || localMonitor != nil
+        guard let tap = self.tap, source != nil else { return false }
+        return CGEvent.tapIsEnabled(tap: tap)
     }
 
     func stop() {
+        precondition(Thread.isMainThread, "MediaKeyMonitor.stop must run on the main thread")
         if let tap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }

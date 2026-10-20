@@ -51,6 +51,9 @@ public final class DDCClient {
     public func change(_ code: UInt8, by delta: Int) throws -> VCPValue {
         let current = try read(code)
         let target = max(0, min(Int(current.maximum), Int(current.current) + delta))
+        if target == Int(current.current) {
+            return current
+        }
         try write(code, value: UInt16(target))
         return VCPValue(code: code, current: UInt16(target), maximum: current.maximum)
     }

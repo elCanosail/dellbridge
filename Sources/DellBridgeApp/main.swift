@@ -11,22 +11,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var client: DDCClient?
     private let mediaKeys = MediaKeyMonitor()
     private let osd = OSDController()
-    private let volumeQueue = DispatchQueue(label: "es.elcanosail.dellbridge.volume")
+    private let ddcQueue = DispatchQueue(label: "es.elcanosail.dellbridge.ddc")
     private var mutedVolume: UInt16?
     private var mediaKeysActive = false
+    private var audioListener: AudioObjectPropertyListenerBlock?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "◐"
+        installObservers()
+        connect()
+        rebuildMenu()
+        configureMediaKeys(prompt: true)
+    }
+
+    private func installObservers() {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(screenParametersChanged),
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
-        connect()
-        rebuildMenu()
-        configureMediaKeys(prompt: true)
+
+        // Accessibility grants can change while the app is running. Without
+        // this, a first-launch denial leaves mediaKeysActive false forever.
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name(rawValue: "com.apple.accessibility.api"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self?.updateMediaKeyTap()
+            }
+        }
+
+        // IOAVService can be stale for a few seconds after wake.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                self?.connect()
+                self?.updateMediaKeyTap()
+                self?.rebuildMenu()
+            }
+        }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            DispatchQueue.main.async {
+                self?.updateMediaKeyTap()
+            }
+        }
+        audioListener = listener
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            DispatchQueue.main,
+            listener
+        )
     }
 
     private func connect() {
@@ -85,18 +133,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    @objc private func brightnessUp() { _ = changeBrightness(rawDelta: 10) }
-    @objc private func brightnessDown() { _ = changeBrightness(rawDelta: -10) }
+    @objc private func brightnessUp() {
+        ddcQueue.async { [weak self] in _ = self?.changeBrightness(rawDelta: 10) }
+    }
+
+    @objc private func brightnessDown() {
+        ddcQueue.async { [weak self] in _ = self?.changeBrightness(rawDelta: -10) }
+    }
 
     @discardableResult
     private func changeBrightness(rawDelta: Int) -> Bool {
         guard let client else { return false }
         do {
             let value = try client.change(VCP.brightness.rawValue, by: rawDelta)
-            osd.showBrightness(current: Int(value.current), maximum: Int(value.maximum))
+            let current = Int(value.current)
+            let maximum = Int(value.maximum)
+            DispatchQueue.main.async { [weak self] in
+                self?.osd.showBrightness(current: current, maximum: maximum)
+            }
             return true
         } catch {
-            NSSound.beep()
+            DispatchQueue.main.async { NSSound.beep() }
             return false
         }
     }
@@ -112,9 +169,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func volumeUp() { _ = changeVolumeStep(1) }
-    @objc private func volumeDown() { _ = changeVolumeStep(-1) }
-    @objc private func muteMenu() { _ = toggleMute() }
+    @objc private func volumeUp() {
+        ddcQueue.async { [weak self] in _ = self?.changeVolumeStep(1) }
+    }
+
+    @objc private func volumeDown() {
+        ddcQueue.async { [weak self] in _ = self?.changeVolumeStep(-1) }
+    }
+
+    @objc private func muteMenu() {
+        ddcQueue.async { [weak self] in _ = self?.toggleMute() }
+    }
 
     @discardableResult
     private func changeVolumeStep(_ direction: Int) -> Bool {
@@ -145,7 +210,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             let reference = try client.read(VCP.volume.rawValue)
             if let saved = mutedVolume {
-                let restore = min(saved, reference.maximum)
+                // If mute happened while volume was already 0, restore one
+                // visible step instead of "unmuting" back to silence.
+                let fallback = UInt16(max(1, Int(reference.maximum) / 16))
+                let restore = saved == 0 ? fallback : min(saved, reference.maximum)
                 try client.write(VCP.volume.rawValue, value: restore)
                 mutedVolume = nil
                 let current = Int(restore)
@@ -188,14 +256,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureMediaKeys(prompt: Bool) {
         mediaKeys.onBrightness = { [weak self] direction in
-            self?.changeBrightnessStep(direction) ?? false
+            guard let self else { return false }
+            self.ddcQueue.async { _ = self.changeBrightnessStep(direction) }
+            return true
         }
         mediaKeys.shouldHandleBrightness = { [weak self] in
             self?.shouldHandleBrightnessKeys() ?? false
         }
         mediaKeys.onVolume = { [weak self] direction in
             guard let self else { return false }
-            self.volumeQueue.async { _ = self.changeVolumeStep(direction) }
+            self.ddcQueue.async { _ = self.changeVolumeStep(direction) }
             return true
         }
         mediaKeys.shouldHandleVolume = { [weak self] in
@@ -203,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         mediaKeys.onMute = { [weak self] in
             guard let self else { return false }
-            self.volumeQueue.async { _ = self.toggleMute() }
+            self.ddcQueue.async { _ = self.toggleMute() }
             return true
         }
         mediaKeys.shouldHandleMute = { [weak self] in
@@ -220,12 +290,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         connect()
         updateMediaKeyTap()
         rebuildMenu()
+        // USB-C hotplug can publish the screen notification before the
+        // IOAVService proxy is ready. Re-check once after settle.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.connect()
+            self?.updateMediaKeyTap()
+            self?.rebuildMenu()
+        }
     }
 
     /// MonitorControl does the same thing: do not leave a media-key tap
     /// installed when there is no external display and the default audio
-    /// device is natively controllable. A HID tap can otherwise swallow the
-    /// brightness/volume keys even when its handler returns the event.
+    /// device is natively controllable. Keeping a tap alive just to pass
+    /// events through creates needless lifecycle and permission edge cases.
     private func updateMediaKeyTap() {
         let hasExternal = AppleSiliconDisplays.all().contains(where: { $0.isExternal })
         let dellAudio = shouldHandleVolumeKeys()
@@ -297,11 +374,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func retryMediaKeys() {
+        mediaKeys.stop()
+        mediaKeysActive = false
         configureMediaKeys(prompt: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         mediaKeys.stop()
+        if let audioListener {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                DispatchQueue.main,
+                audioListener
+            )
+        }
     }
 
     @objc private func quit() {
