@@ -47,6 +47,8 @@ final class MediaKeyMonitor {
     private var lastVolume: TimeInterval = 0
     private var lastVolumeDirection = 0
     private var lastMute: TimeInterval = 0
+    private var volumeKeyDownHandled = false
+    private var muteKeyDownHandled = false
     private let throttle: TimeInterval = 0.08
     private let volumeThrottle: TimeInterval = 0.18
 
@@ -113,6 +115,8 @@ final class MediaKeyMonitor {
         source = nil
         globalMonitor = nil
         localMonitor = nil
+        volumeKeyDownHandled = false
+        muteKeyDownHandled = false
     }
 
     private func makeTap(_ location: CGEventTapLocation) -> CFMachPort? {
@@ -197,11 +201,21 @@ final class MediaKeyMonitor {
             guard isKeyDown else { return true }
             return handleBrightness(direction: keyCode == nxKeyTypeBrightnessUp ? 1 : -1)
         case nxKeyTypeSoundUp, nxKeyTypeSoundDown:
-            guard isKeyDown else { return true }
-            return handleVolume(direction: keyCode == nxKeyTypeSoundUp ? 1 : -1)
+            if isKeyDown {
+                volumeKeyDownHandled = handleVolume(direction: keyCode == nxKeyTypeSoundUp ? 1 : -1)
+                return volumeKeyDownHandled
+            }
+            let handled = volumeKeyDownHandled
+            volumeKeyDownHandled = false
+            return handled
         case nxKeyTypeMute:
-            guard isKeyDown else { return true }
-            return handleMute()
+            if isKeyDown {
+                muteKeyDownHandled = handleMute()
+                return muteKeyDownHandled
+            }
+            let handled = muteKeyDownHandled
+            muteKeyDownHandled = false
+            return handled
         default:
             return false
         }
