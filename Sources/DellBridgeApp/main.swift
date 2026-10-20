@@ -17,12 +17,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var audioListener: AudioObjectPropertyListenerBlock?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "◐"
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.button?.image = makeStatusImage()
+        statusItem.button?.imagePosition = .imageOnly
+        statusItem.button?.imageScaling = .scaleProportionallyDown
+        statusItem.button?.toolTip = "DellBridge"
         installObservers()
         connect()
         rebuildMenu()
         configureMediaKeys(prompt: true)
+    }
+
+    /// A template image is centered by NSStatusBarButton. The text glyph "◐"
+    /// was rendered on the font baseline and sat visibly high in the menu bar.
+    private func makeStatusImage() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let radius: CGFloat = 6
+            let center = NSPoint(x: rect.midX, y: rect.midY)
+            let circleRect = NSRect(
+                x: center.x - radius,
+                y: center.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            )
+            let circle = NSBezierPath(ovalIn: circleRect)
+            circle.lineWidth = 1.4
+
+            NSGraphicsContext.saveGraphicsState()
+            circle.addClip()
+            NSColor.black.setFill()
+            NSRect(
+                x: circleRect.minX,
+                y: circleRect.minY,
+                width: circleRect.width / 2,
+                height: circleRect.height
+            ).fill()
+            NSGraphicsContext.restoreGraphicsState()
+
+            NSColor.black.setStroke()
+            circle.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     private func installObservers() {
