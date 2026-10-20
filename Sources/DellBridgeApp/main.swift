@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var client: DDCClient?
     private let mediaKeys = MediaKeyMonitor()
     private let osd = OSDController()
+    private let volumeQueue = DispatchQueue(label: "es.elcanosail.dellbridge.volume")
     private var mediaKeysActive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -114,14 +115,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             let reference = try client.read(VCP.volume.rawValue)
             let step = max(1, Int(reference.maximum) / 16)
-            if direction > 0, let mute = try? client.read(VCP.mute.rawValue), mute.current != 0 {
-                try? client.write(VCP.mute.rawValue, value: 0)
+            if direction > 0, let mute = try? client.read(VCP.mute.rawValue), mute.current == 1 {
+                // Dell VCP 0x8D: 1 = mute on, 2 = mute off (0 is not valid).
+                try? client.write(VCP.mute.rawValue, value: 2)
             }
             let value = try client.change(VCP.volume.rawValue, by: direction * step)
-            osd.showVolume(current: Int(value.current), maximum: Int(value.maximum))
+            let current = Int(value.current)
+            let maximum = Int(value.maximum)
+            DispatchQueue.main.async { [weak self] in
+                self?.osd.showVolume(current: current, maximum: maximum)
+            }
             return true
         } catch {
-            NSSound.beep()
+            DispatchQueue.main.async { NSSound.beep() }
             return false
         }
     }
@@ -131,12 +137,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let client else { return false }
         do {
             let current = try client.read(VCP.mute.rawValue)
-            let newValue: UInt16 = current.current == 0 ? 1 : 0
+            let newValue: UInt16 = current.current == 1 ? 2 : 1
             try client.write(VCP.mute.rawValue, value: newValue)
-            osd.showMute(newValue != 0)
+            let muted = newValue == 1
+            DispatchQueue.main.async { [weak self] in
+                self?.osd.showMute(muted)
+            }
             return true
         } catch {
-            NSSound.beep()
+            DispatchQueue.main.async { NSSound.beep() }
             return false
         }
     }
@@ -165,11 +174,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         mediaKeys.onVolume = { [weak self] direction in
             guard let self, self.shouldHandleVolumeKeys() else { return false }
-            return self.changeVolumeStep(direction)
+            self.volumeQueue.async { _ = self.changeVolumeStep(direction) }
+            return true
         }
         mediaKeys.onMute = { [weak self] in
             guard let self, self.shouldHandleVolumeKeys() else { return false }
-            return self.toggleMute()
+            self.volumeQueue.async { _ = self.toggleMute() }
+            return true
         }
         if prompt {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary

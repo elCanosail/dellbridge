@@ -45,6 +45,7 @@ final class MediaKeyMonitor {
     private var localMonitor: Any?
     private var lastBrightness: TimeInterval = 0
     private var lastVolume: TimeInterval = 0
+    private var lastVolumeDirection = 0
     private var lastMute: TimeInterval = 0
     private let throttle: TimeInterval = 0.08
     private let volumeThrottle: TimeInterval = 0.18
@@ -54,7 +55,10 @@ final class MediaKeyMonitor {
 
         debugLog("start trusted=\(AXIsProcessTrusted())")
 
-        let tap = makeTap(.cgSessionEventTap) ?? makeTap(.cghidEventTap)
+        // A HID tap is below the session media-key handling, so returning nil
+        // also suppresses macOS's own volume HUD. Fall back to the session tap
+        // if the HID tap cannot be created.
+        let tap = makeTap(.cghidEventTap) ?? makeTap(.cgSessionEventTap)
         if let tap {
             self.tap = tap
             if let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) {
@@ -220,10 +224,13 @@ final class MediaKeyMonitor {
             return false
         }
         let now = ProcessInfo.processInfo.systemUptime
-        if now - lastVolume < volumeThrottle {
+        // Do not let a volume-down debounce swallow an immediate volume-up.
+        // Only throttle repeats in the same direction.
+        if direction == lastVolumeDirection, now - lastVolume < volumeThrottle {
             return true
         }
         lastVolume = now
+        lastVolumeDirection = direction
         return onVolume?(direction) ?? false
     }
 
