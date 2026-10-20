@@ -122,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.changeBrightnessStep(direction) ?? false
         }
         if prompt {
-            let options = [kAXTrustedCheckOptionPrompt as String: true] as CFDictionary
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         }
         mediaKeysActive = mediaKeys.start()
