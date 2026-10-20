@@ -7,11 +7,18 @@ public final class DDCClient {
     private let lock = NSLock()
     private let writeDelay: TimeInterval
     private let writeAttempts: Int
+    private let readAttempts: Int
 
-    public init(transport: DDCTransport, writeDelayMilliseconds: Int = 20, writeAttempts: Int = 2) {
+    public init(
+        transport: DDCTransport,
+        writeDelayMilliseconds: Int = 20,
+        writeAttempts: Int = 2,
+        readAttempts: Int = 3
+    ) {
         self.transport = transport
         self.writeDelay = TimeInterval(max(0, writeDelayMilliseconds)) / 1000.0
         self.writeAttempts = max(1, writeAttempts)
+        self.readAttempts = max(1, readAttempts)
     }
 
     /// Reads a VCP value. Throws `DDCError.displayError` when the monitor
@@ -20,9 +27,22 @@ public final class DDCClient {
         lock.lock()
         defer { lock.unlock() }
 
-        let reply = try transport.readVCP(code)
-        guard reply.result == 0 else { throw DDCError.displayError(reply.result) }
-        return VCPValue(code: reply.code, current: reply.current, maximum: reply.maximum)
+        var lastError: Error?
+        for attempt in 1...readAttempts {
+            do {
+                let reply = try transport.readVCP(code)
+                if reply.result == 0 {
+                    return VCPValue(code: reply.code, current: reply.current, maximum: reply.maximum)
+                }
+                lastError = DDCError.displayError(reply.result)
+            } catch {
+                lastError = error
+            }
+            if attempt < readAttempts {
+                Thread.sleep(forTimeInterval: writeDelay)
+            }
+        }
+        throw lastError ?? DDCError.ioKit(-1)
     }
 
     /// Writes a VCP value. Retries once on transient I/O failure, with pacing.
