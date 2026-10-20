@@ -2,10 +2,12 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import os
 
 private let nxSubtypeAuxControlButtons: Int16 = 8
 private let nxKeyTypeBrightnessUp = 2
 private let nxKeyTypeBrightnessDown = 3
+private let mediaKeyLog = Logger(subsystem: "es.elcanosail.dellbridge", category: "media-keys")
 
 /// Intercepts Apple brightness keys through a session event tap.
 ///
@@ -24,6 +26,7 @@ final class MediaKeyMonitor {
     func start() -> Bool {
         stop()
 
+        mediaKeyLog.notice("media-key tap start: trusted=\(AXIsProcessTrusted(), privacy: .public)")
         let mask = CGEventMask(1) << CGEventMask(NSEvent.EventType.systemDefined.rawValue)
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -33,6 +36,7 @@ final class MediaKeyMonitor {
             callback: mediaKeyTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
+            mediaKeyLog.error("media-key tap creation failed")
             return false
         }
 
@@ -44,6 +48,7 @@ final class MediaKeyMonitor {
         self.source = source
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        mediaKeyLog.notice("media-key tap created")
         return true
     }
 
@@ -66,6 +71,7 @@ final class MediaKeyMonitor {
         }
 
         let data1 = ns.data1
+        mediaKeyLog.notice("systemDefined data1=\(data1, privacy: .public)")
         let keyCode = (data1 & 0xFFFF0000) >> 16
         let keyFlags = data1 & 0x0000FFFF
         let keyState = (keyFlags & 0xFF00) >> 8
@@ -103,6 +109,7 @@ private func mediaKeyTapCallback(
     let monitor = Unmanaged<MediaKeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
 
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        mediaKeyLog.error("media-key tap disabled: \(type.rawValue, privacy: .public)")
         if let tap = monitor.tap {
             CGEvent.tapEnable(tap: tap, enable: true)
         }

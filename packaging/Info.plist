@@ -26,6 +26,8 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>DellBridge reads the Apple brightness keys to control the Dell monitor.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>
