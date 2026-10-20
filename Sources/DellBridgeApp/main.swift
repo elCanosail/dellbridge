@@ -18,6 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "◐"
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
         connect()
         rebuildMenu()
         configureMediaKeys(prompt: true)
@@ -176,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func refresh() {
         connect()
+        updateMediaKeyTap()
         rebuildMenu()
     }
 
@@ -206,7 +213,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         }
-        mediaKeysActive = mediaKeys.start()
+        updateMediaKeyTap()
+    }
+
+    @objc private func screenParametersChanged() {
+        connect()
+        updateMediaKeyTap()
+        rebuildMenu()
+    }
+
+    /// MonitorControl does the same thing: do not leave a media-key tap
+    /// installed when there is no external display and the default audio
+    /// device is natively controllable. A HID tap can otherwise swallow the
+    /// brightness/volume keys even when its handler returns the event.
+    private func updateMediaKeyTap() {
+        let hasExternal = AppleSiliconDisplays.all().contains(where: { $0.isExternal })
+        let dellAudio = shouldHandleVolumeKeys()
+        let needed = hasExternal || dellAudio
+
+        if needed, !mediaKeysActive {
+            mediaKeysActive = mediaKeys.start()
+        } else if !needed, mediaKeysActive {
+            mediaKeys.stop()
+            mediaKeysActive = false
+        }
         rebuildMenu()
     }
 
