@@ -3,14 +3,18 @@
 **Goal:** make the Apple brightness keys control the Dell panel and show a
 native HUD, without breaking the rest of the media keys.
 
-**Status:** M2a implemented (brightness keys + OSD); hardware validation pending.
-M2b (volume/mute) is the next slice.
+**Status:** M2a validated on hardware (2026-10-20); M2b (volume/mute) is the next slice.
 
 ## Implemented
 
-- `MediaKeyMonitor`: `CGEventTap` on session `systemDefined` events. Parses the
-  `NX_KEYTYPE_BRIGHTNESS_UP` / `DOWN` codes, throttles key repeat, re-enables
-  the tap after timeout, and passes every other media key through untouched.
+- `MediaKeyMonitor`: captures `NX_SYSDEFINED` aux events and the raw F1/F2
+  `keyDown` fallback (keycodes 144/145), which is what macOS delivers when the
+  built-in display is absent/clamshell. It also installs global/local `NSEvent`
+  monitors as a second path, throttles key repeat, re-enables the tap after
+  timeout, and passes every other media key through untouched.
+- `scripts/build-app.sh`: ad-hoc builds use a stable designated requirement
+  (`identifier "es.elcanosail.dellbridge"`) so Accessibility/Input Monitoring
+  grants survive rebuilds.
 - `OSDController`: non-activating, click-through HUD with a sun symbol and a
   progress bar; auto-hides after 1.2 s and appears on the screen under the
   pointer.
@@ -28,9 +32,9 @@ M2b (volume/mute) is the next slice.
 
 ## Acceptance criteria
 
-- [ ] `make app` builds on macOS.
-- [ ] Pressing the Apple brightness keys changes the S2725QC brightness.
-- [ ] The OSD appears and shows the new percentage.
+- [x] `make app` builds on macOS.
+- [x] Pressing the Apple brightness keys changes the S2725QC brightness.
+- [ ] The OSD appears and shows the new percentage (implemented; explicit visual check pending).
 - [ ] Play/pause, next/previous and volume keys still work when the Dell is not
       the default output.
 - [ ] Without Accessibility permission, the app starts and the keys pass
@@ -40,4 +44,4 @@ M2b (volume/mute) is the next slice.
 
 | Date | Mac | macOS | Result | Report |
 | --- | --- | --- | --- | --- |
-| — | — | — | pending | — |
+| 2026-10-20 | MacBook M4 | macOS | Brightness keys change the S2725QC. `/tmp/dellbridge-media.log` shows `keyDown keycode=144/145`; the `NX_SYSDEFINED` path arrives with subtype 7 and is ignored. | commit `0e8615b` |

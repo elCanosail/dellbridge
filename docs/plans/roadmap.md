@@ -26,14 +26,15 @@ Prove DDC/CI over direct USB-C with `m1ddc`.
 **Exit:** CLI controls brightness, contrast, volume and input on the S2725QC;
 `swift test` covers protocol and profile parsing.
 
-## M2 — Menu bar and media keys (in progress)
+## M2 — Menu bar and media keys (M2a done; M2b pending)
 
-- [ ] `LSUIElement` agent with status item
-- [x] `CGEventTap` for brightness keys (M2a)
-- [x] Native OSD for brightness (M2a)
+- [x] `LSUIElement` agent with status item
+- [x] `CGEventTap` for brightness keys + raw keyDown 144/145 fallback (M2a)
+- [x] Native OSD for brightness (M2a; implemented)
 - [ ] `CGEventTap` for volume/mute keys (M2b)
 - [ ] Target display: pointer or fixed
-- [x] Accessibility permission flow (implemented; hardware pending)
+- [x] Accessibility/Input Monitoring permission flow (validated 2026-10-20)
+- [x] Stable ad-hoc designated requirement for TCC persistence
 
 **Exit:** Apple keyboard keys change the Dell panel; volume keys follow the
 active audio output.
