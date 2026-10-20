@@ -204,8 +204,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        var name: CFString = "" as CFString
-        var nameSize = UInt32(MemoryLayout<CFString>.size)
+        var name: Unmanaged<CFString>?
+        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>>.size)
         var nameAddress = AudioObjectPropertyAddress(
             mSelector: kAudioObjectPropertyName,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -218,10 +218,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nil,
             &nameSize,
             &name
-        ) == noErr else {
+        ) == noErr, let name else {
             return nil
         }
-        return name as String
+        return name.takeRetainedValue() as String
     }
 
     @objc private func openAccessibilitySettings() {
