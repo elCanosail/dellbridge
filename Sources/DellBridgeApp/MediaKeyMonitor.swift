@@ -2,12 +2,23 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
-import os
 
 private let nxSubtypeAuxControlButtons: Int16 = 8
 private let nxKeyTypeBrightnessUp = 2
 private let nxKeyTypeBrightnessDown = 3
-private let mediaKeyLog = Logger(subsystem: "es.elcanosail.dellbridge", category: "media-keys")
+private let debugLogPath = "/tmp/dellbridge-media.log"
+
+private func debugLog(_ message: String) {
+    let line = "\(Date().timeIntervalSince1970) \(message)\n"
+    let url = URL(fileURLWithPath: debugLogPath)
+    if let handle = try? FileHandle(forWritingTo: url) {
+        handle.seekToEndOfFile()
+        handle.write(Data(line.utf8))
+        try? handle.close()
+    } else {
+        try? Data(line.utf8).write(to: url)
+    }
+}
 
 /// Intercepts Apple brightness keys through a session event tap.
 ///
@@ -26,30 +37,35 @@ final class MediaKeyMonitor {
     func start() -> Bool {
         stop()
 
-        mediaKeyLog.notice("media-key tap start: trusted=\(AXIsProcessTrusted(), privacy: .public)")
-        let mask = CGEventMask(1) << CGEventMask(NSEvent.EventType.systemDefined.rawValue)
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: mediaKeyTapCallback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else {
-            mediaKeyLog.error("media-key tap creation failed")
+        debugLog("start trusted=\(AXIsProcessTrusted())")
+        let tap = makeTap(.cghidEventTap) ?? makeTap(.cgSessionEventTap)
+        guard let tap else {
+            debugLog("tap creation failed")
             return false
         }
-
         self.tap = tap
         guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            debugLog("run loop source failed")
             self.tap = nil
             return false
         }
         self.source = source
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        mediaKeyLog.notice("media-key tap created")
+        debugLog("tap created")
         return true
+    }
+
+    private func makeTap(_ location: CGEventTapLocation) -> CFMachPort? {
+        let mask = CGEventMask(1) << CGEventMask(NSEvent.EventType.systemDefined.rawValue)
+        return CGEvent.tapCreate(
+            tap: location,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: mediaKeyTapCallback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        )
     }
 
     func stop() {
@@ -67,11 +83,12 @@ final class MediaKeyMonitor {
         guard let ns = NSEvent(cgEvent: event),
               ns.type == .systemDefined,
               ns.subtype.rawValue == nxSubtypeAuxControlButtons else {
+            debugLog("non-system event type=\(event.type.rawValue)")
             return Unmanaged.passUnretained(event)
         }
 
         let data1 = ns.data1
-        mediaKeyLog.notice("systemDefined data1=\(data1, privacy: .public)")
+        debugLog("systemDefined data1=\(data1)")
         let keyCode = (data1 & 0xFFFF0000) >> 16
         let keyFlags = data1 & 0x0000FFFF
         let keyState = (keyFlags & 0xFF00) >> 8
@@ -109,7 +126,7 @@ private func mediaKeyTapCallback(
     let monitor = Unmanaged<MediaKeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
 
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-        mediaKeyLog.error("media-key tap disabled: \(type.rawValue, privacy: .public)")
+        debugLog("tap disabled type=\(type.rawValue)")
         if let tap = monitor.tap {
             CGEvent.tapEnable(tap: tap, enable: true)
         }
