@@ -4,6 +4,7 @@ import ApplicationServices
 import CoreGraphics
 
 private let nxSubtypeAuxControlButtons: Int16 = 8
+private let nxSubtypeAuxControlButtonsLegacy: Int16 = 7
 private let nxKeyTypeBrightnessUp = 2
 private let nxKeyTypeBrightnessDown = 3
 private let nxKeyTypeSoundUp = 0
@@ -161,7 +162,9 @@ final class MediaKeyMonitor {
             }
         }
 
-        guard ns.type == .systemDefined, ns.subtype.rawValue == nxSubtypeAuxControlButtons else {
+        guard ns.type == .systemDefined,
+              ns.subtype.rawValue == nxSubtypeAuxControlButtons
+                || ns.subtype.rawValue == nxSubtypeAuxControlButtonsLegacy else {
             debugLog("ns type=\(ns.type.rawValue) subtype=\(ns.subtype.rawValue)")
             return false
         }
