@@ -58,14 +58,16 @@ final class MediaKeyMonitor {
         // A HID tap is below the session media-key handling, so returning nil
         // also suppresses macOS's own volume HUD. Fall back to the session tap
         // if the HID tap cannot be created.
-        let tap = makeTap(.cghidEventTap) ?? makeTap(.cgSessionEventTap)
+        let hidTap = makeTap(.cghidEventTap)
+        debugLog("hid tap=\(hidTap != nil)")
+        let tap = hidTap ?? makeTap(.cgSessionEventTap)
         if let tap {
             self.tap = tap
             if let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) {
                 self.source = source
                 CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
                 CGEvent.tapEnable(tap: tap, enable: true)
-                debugLog("tap created")
+                debugLog("tap created hid=\(hidTap != nil) enabled=\(CGEvent.tapIsEnabled(tap: tap))")
             } else {
                 debugLog("run loop source failed")
             }
