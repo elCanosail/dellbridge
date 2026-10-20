@@ -1,11 +1,12 @@
 # Compatibility
 
 Only rows backed by a hardware report count. `verified` in a profile means the
-M0 checks passed on a real unit.
+M0 evidence is recorded and DellBridge's own transport has validated the VCPs
+on a real unit; an M0 PASS alone does not flip it.
 
 | Monitor | Connection | Brightness | Contrast | Volume | Input | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| Dell S2725QC | direct USB-C (DP 1.4 Alt Mode, 65 W) | — | — | — | — | pending M0 |
+| Dell S2725QC | direct USB-C (DP 1.4 Alt Mode, 65 W) | PASS (75↔50) | PASS (75↔50) | PASS (50↔40) | — | M0 PASS 2026-10-20; M1 transport/input pending |
 
 ## Known constraints
 

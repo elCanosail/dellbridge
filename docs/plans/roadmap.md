@@ -2,14 +2,14 @@
 
 One milestone at a time. A milestone closes only with hardware evidence.
 
-## M0 — Feasibility (current)
+## M0 — Feasibility (done 2026-10-20)
 
 Prove DDC/CI over direct USB-C with `m1ddc`.
 
-- [ ] Enable DDC/CI in the monitor OSD
-- [ ] Read brightness, contrast, volume
-- [ ] Write and restore brightness
-- [ ] Record the report in `docs/plans/m0-feasibility.md`
+- [x] Enable DDC/CI in the monitor OSD
+- [x] Read brightness, contrast, volume
+- [x] Write and restore brightness
+- [x] Record the report in `docs/plans/m0-feasibility.md`
 
 **Exit:** green row in the evidence log. Otherwise the project pivots.
 
@@ -20,7 +20,7 @@ Prove DDC/CI over direct USB-C with `m1ddc`.
 - [x] Display enumeration and stable identity (vendor/model/serial)
 - [x] `dellctl list`, `get`, `set`, `input`, `profile`
 - [x] Serialized client with profile-driven write delay and one retry
-- [x] Profile loader and S2725QC profile (decode tested; hardware pending)
+- [x] Profile loader and S2725QC profile (M0 evidence recorded; transport pending)
 - [ ] Compile the macOS target in CI and validate on the S2725QC
 
 **Exit:** CLI controls brightness, contrast, volume and input on the S2725QC;

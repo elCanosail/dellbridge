@@ -76,12 +76,13 @@ debugging a monitor that does not answer.
 
 ## Status
 
-Early alpha, built against a **Dell S2725QC**. The protocol layer and CLI are
-tested; the macOS transport is drafted from the m1ddc reference and has not yet
-been validated on hardware. The `verified` flag in a profile stays `false`
-until a device report proves it.
+Early alpha, built against a **Dell S2725QC**. M0 hardware feasibility passed on
+2026-10-20: DDC/CI reads and writes brightness, contrast and volume over direct
+USB-C. The DellBridge macOS transport is still drafted from the m1ddc reference
+and has not yet been compiled or hardware-validated; the `verified` flag stays
+`false` until that happens and input switching is probed.
 
-- M0 — hardware feasibility: pending monitor
+- M0 — hardware feasibility: **PASS** (S2725QC, Mac16,13, macOS 26.6.2, 2026-10-20)
 - M1 — transport and CLI: implemented, hardware validation pending
 - M2 — media keys and OSD: next
 - M4 — packaging: DMG and installer ready

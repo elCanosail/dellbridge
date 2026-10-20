@@ -24,7 +24,8 @@
     "reapplyAfterWake": true,
     "notes": [
       "DDC/CI must be enabled in OSD > Others > DDC/CI.",
-      "Expected values from MCCS/m1ddc defaults; not yet verified on this unit.",
+      "M0 PASS 2026-10-20: brightness, contrast and volume read/write/restore verified with m1ddc 1.2.0 on Mac16,13 (Apple M4), macOS 26.6.2, direct USB-C.",
+      "Input source VCP values remain unverified; the M0 probe does not switch inputs.",
       "USB-C carries DisplayPort 1.4 Alt Mode and 65 W power delivery."
     ]
   },

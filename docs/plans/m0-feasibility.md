@@ -6,7 +6,7 @@ building a transport.
 **Topology:** Apple Silicon M4/M5 Mac, latest macOS, one direct USB-C cable
 (video + power), Dell S2725QC.
 
-**Status:** waiting for hardware.
+**Status:** PASS — 2026-10-20. M0 closed; M1 transport pending.
 
 ## Checklist
 
@@ -53,4 +53,13 @@ this table has a green row.
 
 | Date | Mac | macOS | Cable/port | Result | Report |
 | --- | --- | --- | --- | --- | --- |
-| — | — | — | — | pending | — |
+| 2026-10-20 | Mac16,13 (Apple M4) | 26.6.2 (25G83) | direct USB-C | PASS — luminance 75→50→75, contrast 75→50→75, volume 50→40→50; input not probed | m1ddc 1.2.0, report attached |
+
+## Result detail
+
+- Display: Dell S2725QC, vendor `0x10AC`, model `0xA272`, serial `811159618`,
+  EDID UUID `10AC72A2-0000-0000-1C24-0104B53C2278`.
+- Mac: Mac16,13, Apple M4, macOS 26.6.2, 6016×3384 @ 120 Hz over direct USB-C.
+- `m1ddc 1.2.0` read and restored brightness, contrast and volume.
+- Input switching was not probed; the S2725QC input VCP values remain a
+  hypothesis until M1 validates them.
