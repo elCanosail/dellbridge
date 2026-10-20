@@ -12,7 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let mediaKeys = MediaKeyMonitor()
     private let osd = OSDController()
     private let ddcQueue = DispatchQueue(label: "es.elcanosail.dellbridge.ddc")
-    private var statusMenu: NSMenu?
     private var mutedVolume: UInt16?
     private var mediaKeysActive = false
     private var audioListener: AudioObjectPropertyListenerBlock?
@@ -163,18 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("Refresh display", #selector(refresh)))
         menu.addItem(item("Quit DellBridge", #selector(quit), key: "q"))
 
-        statusMenu = menu
-        statusItem.menu = nil
-        statusItem.button?.target = self
-        statusItem.button?.action = #selector(showStatusMenu)
-    }
-
-    /// Open the menu on mouse-up instead of letting NSStatusItem's menu
-    /// tracking consume the original click. The latter could select an item
-    /// under the pointer as the menu appeared.
-    @objc private func showStatusMenu() {
-        guard let statusMenu else { return }
-        statusItem.popUpMenu(statusMenu)
+        statusItem.menu = menu
     }
 
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
