@@ -84,7 +84,8 @@ and has not yet been compiled or hardware-validated; the `verified` flag stays
 
 - M0 — hardware feasibility: **PASS** (S2725QC, Mac16,13, macOS 26.6.2, 2026-10-20)
 - M1 — transport and CLI: implemented, hardware validation pending
-- M2 — media keys and OSD: next
+- M2 — media keys and OSD: in progress (brightness keys + OSD implemented;
+  volume/mute next)
 - M4 — packaging: DMG and installer ready
 
 See [docs/plans/roadmap.md](docs/plans/roadmap.md).

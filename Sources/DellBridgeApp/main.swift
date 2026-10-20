@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import ApplicationServices
 import DellBridgeCore
 
 /// Minimal menu bar shell. The full media-key agent is M2; this exists so the
@@ -7,12 +8,16 @@ import DellBridgeCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var client: DDCClient?
+    private let mediaKeys = MediaKeyMonitor()
+    private let osd = OSDController()
+    private var mediaKeysActive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "◐"
         connect()
         rebuildMenu()
+        configureMediaKeys(prompt: true)
     }
 
     private func connect() {
@@ -44,6 +49,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("Input: HDMI 1", #selector(inputHDMI1)))
         menu.addItem(item("Input: HDMI 2", #selector(inputHDMI2)))
         menu.addItem(.separator())
+        if !AXIsProcessTrusted() {
+            menu.addItem(item("Enable Accessibility…", #selector(openAccessibilitySettings)))
+        }
+        if mediaKeysActive {
+            let active = NSMenuItem(title: "Media keys: active", action: nil, keyEquivalent: "")
+            active.isEnabled = false
+            menu.addItem(active)
+        } else {
+            menu.addItem(item("Retry media keys", #selector(retryMediaKeys)))
+        }
+        menu.addItem(.separator())
         menu.addItem(item("Refresh display", #selector(refresh)))
         menu.addItem(item("Quit DellBridge", #selector(quit), key: "q"))
 
@@ -56,15 +72,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    @objc private func brightnessUp() { changeBrightness(10) }
-    @objc private func brightnessDown() { changeBrightness(-10) }
+    @objc private func brightnessUp() { _ = changeBrightness(rawDelta: 10) }
+    @objc private func brightnessDown() { _ = changeBrightness(rawDelta: -10) }
 
-    private func changeBrightness(_ delta: Int) {
-        guard let client else { return }
+    @discardableResult
+    private func changeBrightness(rawDelta: Int) -> Bool {
+        guard let client else { return false }
         do {
-            _ = try client.change(VCP.brightness.rawValue, by: delta)
+            let value = try client.change(VCP.brightness.rawValue, by: rawDelta)
+            osd.showBrightness(current: Int(value.current), maximum: Int(value.maximum))
+            return true
         } catch {
             NSSound.beep()
+            return false
+        }
+    }
+
+    private func changeBrightnessStep(_ direction: Int) -> Bool {
+        guard let client else { return false }
+        do {
+            let reference = try client.read(VCP.brightness.rawValue)
+            let step = max(1, Int(reference.maximum) / 16)
+            return changeBrightness(rawDelta: direction * step)
+        } catch {
+            return false
         }
     }
 
@@ -84,6 +115,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func refresh() {
         connect()
         rebuildMenu()
+    }
+
+    private func configureMediaKeys(prompt: Bool) {
+        mediaKeys.onBrightness = { [weak self] direction in
+            self?.changeBrightnessStep(direction) ?? false
+        }
+        if prompt {
+            let options = [kAXTrustedCheckOptionPrompt as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        }
+        mediaKeysActive = mediaKeys.start()
+        rebuildMenu()
+    }
+
+    @objc private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func retryMediaKeys() {
+        configureMediaKeys(prompt: true)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        mediaKeys.stop()
     }
 
     @objc private func quit() {
